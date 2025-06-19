@@ -3,6 +3,8 @@
   top.v
   
   picocom /dev/ttyACM0 --baud 9600 --imap lfcrlf
+  
+  assumes 12 MHz clock
 
 */
 
@@ -13,28 +15,28 @@
 /* Top level module for keypad + UART demo */
 module top (
     // input hardware clock (12 MHz)
-    CLK, 
+    input CLK, 
     // all LEDs
-    LED,
+    output LED,
     // UART lines
-    TX, 
+    output TX, 
     );
 
     /* Clock input */
-    input CLK;
+    //input CLK;
 
     /* LED outputs */
-    output LED;
+    //output LED;
 
     /* FTDI I/O */
-    output TX;
+    //output TX;
 
-    /* 9600 Hz clock generation (from 12 MHz) */
-    reg clk_9600 = 0;
-    reg [31:0] cntr_9600 = 32'b0;
-    parameter period_9600 = 625*4;
-
-    /* 1 Hz clock generation (from 12 MHz) */
+    /* counter for sending another char */
+    //reg clk_tx = 0;
+    reg [31:0] cntr_tx_send = 32'b0;
+    parameter period_tx_send = 50  * 12000;  // send a char every 50ms
+  
+    /* counter for updateing the char, which should be sent */
     reg clk_1 = 0;
     reg [31:0] cntr_1 = 32'b0;
     parameter period_1 = 6000000;
@@ -52,52 +54,36 @@ module top (
     /* LED register */
     reg ledval = 0;
 
-    /* UART transmitter module designed for
-       8 bits, no parity, 1 stop bit. 
-    */
-    /*
-    uart_tx_8n1 transmitter (
-        // 9600 baud rate clock
-        .clk (clk_9600),
-        // byte to be transmitted
-        .txbyte (uart_txbyte),
-        // trigger a UART transmit on baud clock
-        .senddata (uart_send),
-        // input: tx is finished
-        .txdone (uart_txed),
-        // output UART tx pin
-        .tx (TX),
-    );
-    */
-    uart_tx #(
-    .BIT_RATE(9600),
-    .PAYLOAD_BITS(8),
-    .CLK_HZ  (12_000_000)
-    ) i_uart_tx(
-    .clk          (CLK),                            // Input: Clock pin with CLK_HZ freq
-    .resetn       (1),                              // Input
-    .uart_txd     (TX),                    // Output: UART transmit pin
-    .uart_tx_en   (uart_send),             // Input: HI pulse to start the transfer 
-    .uart_tx_busy (uart_txed),           // Output to indicate transmission
-    .uart_tx_data (uart_txbyte)            //  [PAYLOAD_BITS-1:0] 
-    );
+    /* UART transmitter module designed for 8 bits, no parity, 1 stop bit.  */
+    uart_tx 
+      #(
+        .BIT_RATE(9600),
+        .PAYLOAD_BITS(8),
+        .CLK_HZ (12_000_000)
+      ) 
+      i_uart_tx(
+        .clk          (CLK),                            // Input: Clock pin with CLK_HZ freq
+        .resetn       (1),                              // Input
+        .uart_txd     (TX),                    // Output: UART transmit pin
+        .uart_tx_en   (uart_send),             // Input: HI pulse to start the transfer 
+        .uart_tx_busy (uart_txed),           // Output to indicate transmission
+        .uart_tx_data (uart_txbyte)            //  [PAYLOAD_BITS-1:0] 
+      );
 
 
     /* Wiring */
     assign LED=ledval;
     
-    /* Low speed clock generation */
+    /* generate enable signal for transmit */
     always @ (posedge CLK) 
     begin
-        /* generate 9600 Hz clock */
-        cntr_9600 <= cntr_9600 + 1;
-        if (cntr_9600 == period_9600) 
+        cntr_tx_send <= cntr_tx_send + 1;
+        if (cntr_tx_send == period_tx_send) 
           begin
-            clk_9600 <= ~clk_9600;
-            cntr_9600 <= 32'b0;
+            cntr_tx_send <= 32'b0;
             uart_send <= 1'b1;
           end
-        else if (cntr_9600 == 4 ) 
+        else if (cntr_tx_send == 4 ) 
           begin
               uart_send <= 1'b0;
           end
