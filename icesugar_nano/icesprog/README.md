@@ -1,10 +1,21 @@
-# iCELink Tips
+# icesprog
+
+## Purpose
+
+ * Change clock speed of the attached FPGA icesugar-nano board
+ * Upload the binary (which can also be done via the mounted drive)
+
+## License
 
 This is a copy from here: https://github.com/wuxx/icesugar/tree/master/tools/src
 
 Published under GNU Lesser General Public License v2.1 (see source code).
 
 
+## Required libs for make
+
+sudo apt install libhidapi-dev                 // for icesprog from https://github.com/wuxx/icesugar/tree/master/tools
+sudo apt install libusb-1.0-0-dev               // for icesprog from https://github.com/wuxx/icesugar/tree/master/tools
 
 
 
