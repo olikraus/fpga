@@ -75,6 +75,18 @@ module top (
     
   
   /*
+    txfsm
+    state machine, which sends one byte via uart.
+    input: 
+      txfsm_start       from txfsm user
+      tx_busy              connected to the uart block
+    output: 
+      txfsm_is_idle     to txfsm user
+      tx_enable         connected to the uart block
+    
+    It is responsibility of the txfsm user to assign a proper value to tx_reg
+    
+  */
   
   localparam [1:0]
     TXFSM_IDLE = 0,
@@ -97,6 +109,10 @@ module top (
       TXFSM_IDLE: begin
           tx_enable <= 0;
           txfsm_is_idle <= 1;
+          if ( txfsm_start == 1 ) 
+            txfsm_state <= TXFSM_START;
+          else
+            txfsm_state <= TXFSM_IDLE;
         end
       TXFSM_START: begin
           tx_enable <= 1;
@@ -111,83 +127,90 @@ module top (
           txfsm_is_idle <= 0;
           if ( tx_busy == 1 )
             txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
+          else
+            txfsm_state <= TXFSM_WAIT_FOR_BUSY;
         end
       TXFSM_WAIT_FOR_NOT_BUSY: begin
           tx_enable <= 0;
           txfsm_is_idle <= 0;
           if ( tx_busy == 0 )
             txfsm_state <= TXFSM_IDLE;
+          else
+            txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
         end
       endcase
     end
 
-  */
 
   localparam [3:0]
     IDLE = 0,
     TX_START = 1,
     TX_WAIT = 2,
-    TX_HEX_HI_START1 = 3,
-    TX_HEX_HI_START2 = 4,
-    TX_HEX_HI_START3 = 5,
-    TX_HEX_HI_WAIT = 6,
-    TX_HEX_LO_START1 = 7,
-    TX_HEX_LO_START2 = 8;
-
+    TX_HEX_HI_START = 3,
+    TX_HEX_HI_WAIT = 4,
+    TX_HEX_LO_START = 5,
+    TX_HEX_LO_WAIT = 6;
+    
   reg [3:0] state;
 
   initial begin
-    txfsm_state = IDLE;
+    state = IDLE;
   end
 
   always @(posedge CLK) begin
     case (state)
       IDLE: begin
-          tx_enable <= 0;
-          if ( rx_valid ) begin            
-            state <= TX_HEX_HI_START1;
-          end 
+        txfsm_start <= 0;
+        tx_reg <=  0;
+        if ( rx_valid )
+          state <= TX_HEX_HI_START;
+        else
+          state <= IDLE;
         end
-      TX_START: begin 
-            tx_reg <=  rx_data[7:0];
-            tx_enable <= 1;
-            state <= TX_WAIT;
-          end
-      TX_WAIT: begin
-          tx_enable <= 0;
-          if ( tx_busy == 0 )
-            state <= IDLE;
-        end
-      TX_HEX_HI_START1: begin
+        
+      TX_HEX_HI_START: begin
           hex_reg[3:0] <= rx_data[7:4];
-          state <= TX_HEX_HI_START2;
-        end
-      TX_HEX_HI_START2: begin 
           tx_reg <=  hex_char;
-          tx_enable <= 1;
-          if ( tx_busy == 0 )
-            state <= TX_HEX_HI_START3;
+          state <= TX_HEX_HI_WAIT;
+          txfsm_start <= 1;
+          
+          if ( txfsm_is_idle == 1 )
+            state <= TX_HEX_HI_WAIT;
           else
-            state <= TX_HEX_HI_WAIT;
+            state <= TX_HEX_HI_START;
         end
-      TX_HEX_HI_START3: begin
-          if ( tx_busy == 1 )
-            state <= TX_HEX_HI_WAIT;
-        end
+        
       TX_HEX_HI_WAIT: begin
-          tx_enable <= 0;
-          if ( tx_busy == 0 )
-            state <= TX_HEX_LO_START1;
+        tx_reg <=  hex_char;
+        txfsm_start <= 0;
+        
+        if ( txfsm_is_idle == 0 )
+          state <= TX_HEX_LO_START;
+        else
+          state <= TX_HEX_HI_WAIT;
         end
-      TX_HEX_LO_START1: begin
+        
+      TX_HEX_LO_START: begin
+          txfsm_start <= 1;
           hex_reg[3:0] <= rx_data[3:0];
-          state <= TX_HEX_LO_START2;
+          tx_reg <=  hex_char;
+          
+          if ( txfsm_is_idle == 1 )
+            state <= IDLE;
+          else
+            state <= TX_HEX_LO_START;
         end
-      TX_HEX_LO_START2: begin 
-            tx_reg <=  hex_char;
-            tx_enable <= 1;
-            state <= TX_WAIT;
-          end
+        
+      TX_HEX_LO_WAIT: begin
+        tx_reg <=  hex_char;
+        txfsm_start <= 0;
+        
+        if ( txfsm_is_idle == 0 )
+          state <= TX_HEX_LO_START;
+        else
+          state <= TX_HEX_LO_WAIT;
+        end
+        
       default: 
         state <= IDLE;
     endcase
