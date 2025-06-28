@@ -73,6 +73,55 @@ module top (
   reg [3:0] hex_reg;
   wire [7:0] hex_char;
     
+  
+  /*
+  
+  localparam [1:0]
+    TXFSM_IDLE = 0,
+    TXFSM_START = 1,            // assign value to tx_reg
+    TXFSM_WAIT_FOR_BUSY = 2,
+    TXFSM_WAIT_FOR_NOT_BUSY = 3;
+
+  reg [1:0] txfsm_state;
+  wire txfsm_start;
+  wire txfsm_is_idle;
+
+  initial begin
+    txfsm_state = TXFSM_IDLE;
+    txfsm_start = 0;     // input for txfsm
+    txfsm_is_idle = 1;  // output from txfsm
+  end
+
+  always @(posedge CLK) begin
+    case (txfsm_state)
+      TXFSM_IDLE: begin
+          tx_enable <= 0;
+          txfsm_is_idle <= 1;
+        end
+      TXFSM_START: begin
+          tx_enable <= 1;
+          txfsm_is_idle <= 0;
+          if ( tx_busy == 0 )
+            txfsm_state <= TXFSM_WAIT_FOR_BUSY;
+          else
+            txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
+        end
+      TXFSM_WAIT_FOR_BUSY: begin
+          tx_enable <= 1;
+          txfsm_is_idle <= 0;
+          if ( tx_busy == 1 )
+            txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
+        end
+      TXFSM_WAIT_FOR_NOT_BUSY: begin
+          tx_enable <= 0;
+          txfsm_is_idle <= 0;
+          if ( tx_busy == 0 )
+            txfsm_state <= TXFSM_IDLE;
+        end
+      endcase
+    end
+
+  */
 
   localparam [3:0]
     IDLE = 0,
@@ -86,7 +135,11 @@ module top (
     TX_HEX_LO_START2 = 8;
 
   reg [3:0] state;
-  
+
+  initial begin
+    txfsm_state = IDLE;
+  end
+
   always @(posedge CLK) begin
     case (state)
       IDLE: begin
