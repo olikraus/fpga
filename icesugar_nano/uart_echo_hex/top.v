@@ -82,7 +82,7 @@ module top (
       tx_busy              connected to the uart block
     output: 
       txfsm_is_idle     to txfsm user
-      tx_enable         connected to the uart block
+      txfsm_tx_enable         connected to the uart block
     
     It is responsibility of the txfsm user to assign a proper value to tx_reg
     
@@ -97,17 +97,19 @@ module top (
   reg [1:0] txfsm_state;
   wire txfsm_start;
   wire txfsm_is_idle;
+  wire txfsm_tx_enable;
 
   initial begin
     txfsm_state = TXFSM_IDLE;
     txfsm_start = 0;     // input for txfsm
     txfsm_is_idle = 1;  // output from txfsm
+    txfsm_tx_enable = 0; // output from txfsm, which should drive the tx_enable of tx_uart
   end
-
+  
   always @(posedge CLK) begin
     case (txfsm_state)
       TXFSM_IDLE: begin
-          tx_enable <= 0;
+          txfsm_tx_enable <= 0;
           txfsm_is_idle <= 1;
           if ( txfsm_start == 1 ) 
             txfsm_state <= TXFSM_START;
@@ -115,7 +117,7 @@ module top (
             txfsm_state <= TXFSM_IDLE;
         end
       TXFSM_START: begin
-          tx_enable <= 1;
+          txfsm_tx_enable <= 1;
           txfsm_is_idle <= 0;
           if ( tx_busy == 0 )
             txfsm_state <= TXFSM_WAIT_FOR_BUSY;
@@ -123,7 +125,7 @@ module top (
             txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
         end
       TXFSM_WAIT_FOR_BUSY: begin
-          tx_enable <= 1;
+          txfsm_tx_enable <= 1;
           txfsm_is_idle <= 0;
           if ( tx_busy == 1 )
             txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
@@ -131,13 +133,18 @@ module top (
             txfsm_state <= TXFSM_WAIT_FOR_BUSY;
         end
       TXFSM_WAIT_FOR_NOT_BUSY: begin
-          tx_enable <= 0;
+          txfsm_tx_enable <= 0;
           txfsm_is_idle <= 0;
           if ( tx_busy == 0 )
             txfsm_state <= TXFSM_IDLE;
           else
             txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
         end
+      default: begin
+          txfsm_tx_enable <= 0;
+          txfsm_is_idle <= 0;
+          txfsm_state <= TXFSM_IDLE;
+          end
       endcase
     end
 
@@ -161,6 +168,7 @@ module top (
     case (state)
       IDLE: begin
         txfsm_start <= 0;
+        hex_reg[3:0] <= 0;
         tx_reg <=  0;
         if ( rx_valid )
           state <= TX_HEX_HI_START;
@@ -171,7 +179,6 @@ module top (
       TX_HEX_HI_START: begin
           hex_reg[3:0] <= rx_data[7:4];
           tx_reg <=  hex_char;
-          state <= TX_HEX_HI_WAIT;
           txfsm_start <= 1;
           
           if ( txfsm_is_idle == 1 )
@@ -181,6 +188,7 @@ module top (
         end
         
       TX_HEX_HI_WAIT: begin
+        hex_reg[3:0] <= rx_data[7:4];
         tx_reg <=  hex_char;
         txfsm_start <= 0;
         
@@ -191,9 +199,9 @@ module top (
         end
         
       TX_HEX_LO_START: begin
-          txfsm_start <= 1;
           hex_reg[3:0] <= rx_data[3:0];
           tx_reg <=  hex_char;
+          txfsm_start <= 1;
           
           if ( txfsm_is_idle == 1 )
             state <= IDLE;
@@ -202,6 +210,7 @@ module top (
         end
         
       TX_HEX_LO_WAIT: begin
+        hex_reg[3:0] <= rx_data[3:0];
         tx_reg <=  hex_char;
         txfsm_start <= 0;
         
@@ -239,6 +248,9 @@ module top (
       .uart_rx_valid(rx_valid), // Valid data recieved and available.
       .uart_rx_data(rx_data),   // The recieved data.
     );
+    
+    
+  assign tx_enable = txfsm_tx_enable;
 
   uart_tx 
     #(

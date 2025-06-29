@@ -12,6 +12,7 @@ build:
 	nextpnr-ice40 --lp1k --package cm36 --json $(filename).json --pcf $(pcf_file) --asc $(filename).asc --freq 48
 	# input: .asc, output: .bin
 	icepack $(filename).asc $(filename).bin
+	grep "    SB_\| Number of" $(filename).log
 
 upload:
 	@if [ -d '$(ICELINK_DIR)' ]; \
