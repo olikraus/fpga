@@ -344,40 +344,32 @@ module top (
         if ( rx_valid == 0 )
           state <= IDLE;
         else
-          state <= TX_HEX_HI_START1;
-      end
-
-      TX_HEX_HI_START1: begin                   // delay by one cycle to set the tx_data
           state <= TX_HEX_HI_START2;
       end
 
       TX_HEX_HI_START2: begin                   // trigger txfsm_start
-          if ( txfsm_is_idle == 0 )
+          if ( txfsm_is_idle == 1 )
             state <= TX_HEX_HI_START2;
           else
             state <= TX_HEX_HI_WAIT;
       end
         
       TX_HEX_HI_WAIT: begin
-          if ( txfsm_is_idle == 1 )
+          if ( txfsm_is_idle == 0 )
             state <= TX_HEX_HI_WAIT;
           else
-            state <= TX_HEX_LO_START1;
-      end
-
-      TX_HEX_LO_START1: begin
-          state <= TX_HEX_LO_START2;
+            state <= TX_HEX_LO_START2;
       end
 
       TX_HEX_LO_START2: begin
-          if ( txfsm_is_idle == 0 )
+          if ( txfsm_is_idle == 1 )
             state <= TX_HEX_LO_START2;
           else
             state <= TX_HEX_LO_WAIT;
       end
         
       TX_HEX_LO_WAIT: begin
-          if ( txfsm_is_idle == 1 )
+          if ( txfsm_is_idle == 0 )
             state <= TX_HEX_LO_WAIT;
           else
             state <= IDLE;
@@ -397,12 +389,6 @@ module top (
         txfsm_start <= 0;
       end
 
-      TX_HEX_HI_START1: begin
-          hex_4_bit_data[3:0] <= rx_data[7:4];
-          tx_data <=  hex_char;
-          txfsm_start <= 0;
-      end
-
       TX_HEX_HI_START2: begin
           hex_4_bit_data[3:0] <= rx_data[7:4];
           tx_data <=  hex_char;
@@ -415,11 +401,6 @@ module top (
           txfsm_start <= 0;
       end
         
-      TX_HEX_LO_START1: begin
-          hex_4_bit_data[3:0] <= rx_data[3:0];
-          tx_data <=  hex_char;
-          txfsm_start <= 0;
-      end
       TX_HEX_LO_START2: begin
           hex_4_bit_data[3:0] <= rx_data[3:0];
           tx_data <=  hex_char;
