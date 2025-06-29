@@ -15,6 +15,7 @@ build:
 	grep "    SB_\| Number of" $(filename).log
 
 upload:
+	@echo "UPLOAD"
 	@if [ -d '$(ICELINK_DIR)' ]; \
         then \
             cp $(filename).bin $(ICELINK_DIR); \
@@ -25,8 +26,10 @@ upload:
 
 
 uart:
-	echo "Exit: ctrl-a ctrl-x   Help: ctrl-a ctrl-h"
+	@echo "PICOCOM Exit: ctrl-a ctrl-x   Help: ctrl-a ctrl-h"
 	picocom /dev/ttyACM0 --baud 9600 --imap crcrlf
+
+all: build upload uart
 
 clean:
 	rm -rf $(filename).blif $(filename).asc $(filename).bin $(filename).json $(filename).log
