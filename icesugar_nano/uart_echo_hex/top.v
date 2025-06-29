@@ -10,8 +10,10 @@
   
   
   todo
-    - create modules for the state machines
-    - change idle lines to busy lines to be consistent and also to have all wires 0 at reset
+    - change idle lines to busy lines to be consistent and also to have all wires 0 at reset --> DONE
+    - create modules for the state machines --> doesn't work out somehow
+        maybe some reset issue
+        some it is also affected by the init block
 
 */
 
@@ -50,12 +52,107 @@ module nibble_to_ascii(
   end
 endmodule
 
-/*
-module txfsm(
-  );
-endmodule
-*/
 
+  /*======================================================*/
+  /*
+    txfsm
+      state machine, which sends one byte via uart.
+      this is a wrapper fsm to wait for the transmission
+      
+    input: 
+      txfsm_i_start       from txfsm user
+      tx_busy              connected to the uart block
+    output: 
+      txfsm_o_is_busy     to txfsm user
+      txfsm_o_tx_enable         connected to the uart block
+    
+    It is responsibility of the txfsm user to assign a proper value to tx_data
+    
+  */  
+
+module txfsm(
+    input wire txfsm_i_start,
+    output wire txfsm_o_is_busy,
+    output wire txfsm_o_tx_enable
+  );
+
+  /* txfsm state values */
+  localparam [1:0]
+    TXFSM_IDLE = 0,
+    TXFSM_START = 1,            // assign value to tx_data
+    TXFSM_WAIT_FOR_BUSY = 2,
+    TXFSM_WAIT_FOR_NOT_BUSY = 3;
+
+  /* txfsm wires */
+  reg [1:0] txfsm_state;
+
+  /* initial conditions */
+  initial begin
+    txfsm_state = TXFSM_IDLE;
+    //txfsm_i_start = 0;     // input for txfsm
+    txfsm_o_is_busy = 0;  // output from txfsm
+    txfsm_o_tx_enable = 0; // output from txfsm, which should drive the tx_enable of tx_uart
+  end
+  
+  /* next state calculation */
+  always @(posedge CLK) begin
+    case (txfsm_state)
+      TXFSM_IDLE: begin
+        if ( txfsm_i_start == 1 ) 
+          txfsm_state <= TXFSM_START;
+        else
+          txfsm_state <= TXFSM_IDLE;
+      end
+      TXFSM_START: begin
+        if ( tx_busy == 0 )
+          txfsm_state <= TXFSM_WAIT_FOR_BUSY;
+        else
+          txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
+      end
+      TXFSM_WAIT_FOR_BUSY: begin
+        if ( tx_busy == 1 )
+          txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
+        else
+          txfsm_state <= TXFSM_WAIT_FOR_BUSY;
+      end
+      TXFSM_WAIT_FOR_NOT_BUSY: begin
+        if ( tx_busy == 0 )
+          txfsm_state <= TXFSM_IDLE;
+        else
+          txfsm_state <= TXFSM_WAIT_FOR_NOT_BUSY;
+      end
+      default: begin
+          txfsm_state <= TXFSM_IDLE;
+      end
+    endcase
+  end
+
+  /* output calculation */
+  always @(*) begin
+    case (txfsm_state)
+      TXFSM_IDLE: begin
+        txfsm_o_tx_enable = 0;
+        txfsm_o_is_busy = 0;
+      end
+      TXFSM_START: begin
+        txfsm_o_tx_enable = 1;
+        txfsm_o_is_busy = 1;
+      end
+      TXFSM_WAIT_FOR_BUSY: begin
+        txfsm_o_tx_enable = 1;
+        txfsm_o_is_busy = 1;
+      end
+      TXFSM_WAIT_FOR_NOT_BUSY: begin
+        txfsm_o_tx_enable = 0;
+        txfsm_o_is_busy = 1;
+      end
+      default: begin
+        txfsm_o_tx_enable = 0;
+        txfsm_o_is_busy = 1;
+      end
+    endcase
+  end
+endmodule
 
 
 
@@ -80,6 +177,11 @@ module top (
   wire [3:0] hex_4_bit_data;
   wire [7:0] hex_char;
     
+  wire txfsm_i_start;
+  wire txfsm_o_is_busy;
+  wire txfsm_o_tx_enable;
+  
+
 
   /*======================================================*/
   /*
@@ -354,9 +456,22 @@ module top (
   assign LED = tx_data[0];
   //assign LED = txhexfsm_o_is_busy;
   //assign LED = txfsm_o_is_busy;
-  
 
   /*======================================================*/
+  
+
+  /*
+  txfsm i_txfsm(
+    .txfsm_i_start(txfsm_i_start),
+    .txfsm_o_is_busy(txfsm_o_is_busy),
+    .txfsm_o_tx_enable(txfsm_o_tx_enable)
+  );
+  */
+
+
+
+  /*======================================================*/
+
   /*
     txfsm
       state machine, which sends one byte via uart.
@@ -452,9 +567,6 @@ module top (
     endcase
   end
 
-  /*======================================================*/
-
-  assign txfsm_i_start = txhexfsm_o_txfsm_i_start | topfsm_o_txfsm_i_start;
 
   /*======================================================*/
 
@@ -480,6 +592,7 @@ module top (
     );
     
     
+  assign txfsm_i_start = txhexfsm_o_txfsm_i_start | topfsm_o_txfsm_i_start;
   assign tx_enable = txfsm_o_tx_enable;
   assign tx_data[7:0] = txhexfsm_o_tx_data[7:0] | topfsm_o_tx_data[7:0];
 
