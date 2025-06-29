@@ -25,6 +25,7 @@ upload:
 
 
 uart:
+	echo "Exit: ctrl-a ctrl-x   Help: ctrl-a ctrl-h"
 	picocom /dev/ttyACM0 --baud 9600 --imap crcrlf
 
 clean:
