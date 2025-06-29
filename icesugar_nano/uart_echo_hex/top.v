@@ -91,7 +91,7 @@ module top (
       txhexfsm_data
       txhexfsm_start
     output:
-      txhexfsm_is_idle
+      txhexfsm_o_is_busy
     
     connections:
       output the value from hex_char
@@ -112,7 +112,7 @@ module top (
   reg [2:0] txhexfsm_state;
   wire [7:0] txhexfsm_data;
   wire txhexfsm_start;
-  wire txhexfsm_is_idle;
+  wire txhexfsm_o_is_busy;
   wire [7:0] txhexfsm_o_tx_data;        // output
   wire txhexfsm_o_txfsm_start;
 
@@ -120,7 +120,7 @@ module top (
   initial begin
     txhexfsm_state = TXHEXFSM_IDLE;
     txhexfsm_start = 0;     // input for txhexfsm
-    txhexfsm_is_idle = 1;  // output from txhexfsm
+    txhexfsm_o_is_busy = 0;  // output from txhexfsm
     txhexfsm_o_tx_data = 0;
     txhexfsm_o_txfsm_start = 0;
   end
@@ -139,14 +139,14 @@ module top (
       end
 
       TXHEXFSM_HI_START2: begin                   // trigger txfsm_start
-          if ( txfsm_is_idle == 0 )
+          if ( txfsm_o_is_busy == 0)
             txhexfsm_state <= TXHEXFSM_HI_START2;
           else
             txhexfsm_state <= TXHEXFSM_HI_WAIT;
       end
         
       TXHEXFSM_HI_WAIT: begin
-          if ( txfsm_is_idle == 1 )
+          if ( txfsm_o_is_busy == 1 )
             txhexfsm_state <= TXHEXFSM_HI_WAIT;
           else
             txhexfsm_state <= TXHEXFSM_LO_START1;
@@ -157,14 +157,14 @@ module top (
       end
 
       TXHEXFSM_LO_START2: begin
-          if ( txfsm_is_idle == 0 )
+          if ( txfsm_o_is_busy == 0 )
             txhexfsm_state <= TXHEXFSM_LO_START2;
           else
             txhexfsm_state <= TXHEXFSM_LO_WAIT;
       end
         
       TXHEXFSM_LO_WAIT: begin
-          if ( txfsm_is_idle == 1 )
+          if ( txfsm_o_is_busy == 1 )
             txhexfsm_state <= TXHEXFSM_LO_WAIT;
           else
             txhexfsm_state <= TXHEXFSM_IDLE;
@@ -182,56 +182,56 @@ module top (
         hex_4_bit_data[3:0] = 0;
         txhexfsm_o_tx_data =  0;
         txhexfsm_o_txfsm_start = 0;
-        txhexfsm_is_idle = 1;
+        txhexfsm_o_is_busy = 0;
       end
 
       TXHEXFSM_HI_START1: begin
         hex_4_bit_data[3:0] = txhexfsm_data[7:4];
         txhexfsm_o_tx_data =  hex_char;
         txhexfsm_o_txfsm_start = 0;
-        txhexfsm_is_idle = 0;
+        txhexfsm_o_is_busy = 1;
       end
 
       TXHEXFSM_HI_START2: begin
         hex_4_bit_data[3:0] = txhexfsm_data[7:4];
         txhexfsm_o_tx_data =  hex_char;
         txhexfsm_o_txfsm_start = 1;
-        txhexfsm_is_idle = 0;
+        txhexfsm_o_is_busy = 1;
       end
         
       TXHEXFSM_HI_WAIT: begin
         hex_4_bit_data[3:0] = txhexfsm_data[7:4];
         txhexfsm_o_tx_data =  hex_char;
         txhexfsm_o_txfsm_start = 0;
-        txhexfsm_is_idle = 0;
+        txhexfsm_o_is_busy = 1;
       end
         
       TXHEXFSM_LO_START1: begin
         hex_4_bit_data[3:0] = txhexfsm_data[3:0];
         txhexfsm_o_tx_data =  hex_char;
         txhexfsm_o_txfsm_start = 0;
-        txhexfsm_is_idle = 0;
+        txhexfsm_o_is_busy = 1;
       end
       
       TXHEXFSM_LO_START2: begin
         hex_4_bit_data[3:0] = txhexfsm_data[3:0];
         txhexfsm_o_tx_data =  hex_char;
         txhexfsm_o_txfsm_start = 1;
-        txhexfsm_is_idle = 0;
+        txhexfsm_o_is_busy = 1;
       end
         
       TXHEXFSM_LO_WAIT: begin
         hex_4_bit_data[3:0] = txhexfsm_data[3:0];
         txhexfsm_o_tx_data =  hex_char;
         txhexfsm_o_txfsm_start = 0;
-        txhexfsm_is_idle = 0;
+        txhexfsm_o_is_busy = 1;
       end
         
       default: begin
         hex_4_bit_data[3:0] = 0;
         txhexfsm_o_tx_data =  0;
         txhexfsm_o_txfsm_start = 0;
-        txhexfsm_is_idle = 0;
+        txhexfsm_o_is_busy = 1;
       end
     endcase
   end
@@ -247,65 +247,65 @@ module top (
     TOPFSM_OUT_HEX_START = 3,
     TOPFSM_OUT_HEX_WAIT = 4;
     
-  reg [3:0] state;
+  reg [3:0] topfsm_state;
   wire topfsm_o_txfsm_start;
   wire [7:0] topfsm_o_tx_data;
 
   initial begin
-    state = TOPFSM_IDLE;
+    topfsm_state = TOPFSM_IDLE;
     topfsm_o_txfsm_start = 0;
     topfsm_o_tx_data = 0;
   end
 
   always @(posedge CLK) begin
-    case (state)
+    case (topfsm_state)
       TOPFSM_IDLE: begin
         if ( rx_valid == 0 )
-          state <= TOPFSM_IDLE;
+          topfsm_state <= TOPFSM_IDLE;
         else begin
           if ( rx_data == 13 )
-            state <= TOPFSM_OUT_CHAR_START;
+            topfsm_state <= TOPFSM_OUT_CHAR_START;
           else
-            state <= TOPFSM_OUT_HEX_START;
+            topfsm_state <= TOPFSM_OUT_HEX_START;
         end
       end
 
       TOPFSM_OUT_CHAR_START: begin                   // trigger txfsm_start
-          if ( txfsm_is_idle == 1 )
-            state <= TOPFSM_OUT_CHAR_START;
+          if ( txfsm_o_is_busy == 0 )
+            topfsm_state <= TOPFSM_OUT_CHAR_START;
           else
-            state <= TOPFSM_OUT_CHAR_WAIT;
+            topfsm_state <= TOPFSM_OUT_CHAR_WAIT;
       end
         
       TOPFSM_OUT_CHAR_WAIT: begin
-          if ( txfsm_is_idle == 0 )
-            state <= TOPFSM_OUT_CHAR_WAIT;
+          if ( txfsm_o_is_busy == 1 )
+            topfsm_state <= TOPFSM_OUT_CHAR_WAIT;
           else
-            state <= TOPFSM_IDLE;
+            topfsm_state <= TOPFSM_IDLE;
       end
 
       TOPFSM_OUT_HEX_START: begin                   // trigger txfsm_start
-          if ( txhexfsm_is_idle == 1 )
-            state <= TOPFSM_OUT_HEX_START;
+          if ( txhexfsm_o_is_busy == 0 )
+            topfsm_state <= TOPFSM_OUT_HEX_START;
           else
-            state <= TOPFSM_OUT_HEX_WAIT;
+            topfsm_state <= TOPFSM_OUT_HEX_WAIT;
       end
         
       TOPFSM_OUT_HEX_WAIT: begin
-          if ( txhexfsm_is_idle == 0 )
-            state <= TOPFSM_OUT_HEX_WAIT;
+          if ( txhexfsm_o_is_busy == 1 )
+            topfsm_state <= TOPFSM_OUT_HEX_WAIT;
           else
-            state <= TOPFSM_IDLE;
+            topfsm_state <= TOPFSM_IDLE;
       end
 
       default: begin
-        state <= TOPFSM_IDLE;
+        topfsm_state <= TOPFSM_IDLE;
       end
     endcase
   end
 
   always @(*) begin
-    case (state)
+    case (topfsm_state)
       TOPFSM_IDLE: begin
         txhexfsm_data = 0;
         txhexfsm_start = 0;
@@ -352,8 +352,8 @@ module top (
 
 
   assign LED = tx_data[0];
-  //assign LED = txhexfsm_is_idle;
-  //assign LED = txfsm_is_idle;
+  //assign LED = txhexfsm_o_is_busy;
+  //assign LED = txfsm_o_is_busy;
   
 
   /*======================================================*/
@@ -366,7 +366,7 @@ module top (
       txfsm_start       from txfsm user
       tx_busy              connected to the uart block
     output: 
-      txfsm_is_idle     to txfsm user
+      txfsm_o_is_busy     to txfsm user
       txfsm_tx_enable         connected to the uart block
     
     It is responsibility of the txfsm user to assign a proper value to tx_data
@@ -382,7 +382,7 @@ module top (
   /* txfsm wires */
   reg [1:0] txfsm_state;
   wire txfsm_start;
-  wire txfsm_is_idle;
+  wire txfsm_o_is_busy;
   wire txfsm_tx_enable;
 
   
@@ -395,7 +395,7 @@ module top (
   initial begin
     txfsm_state = TXFSM_IDLE;
     //txfsm_start = 0;     // input for txfsm
-    txfsm_is_idle = 1;  // output from txfsm
+    txfsm_o_is_busy = 0;  // output from txfsm
     txfsm_tx_enable = 0; // output from txfsm, which should drive the tx_enable of tx_uart
   end
   
@@ -437,23 +437,23 @@ module top (
     case (txfsm_state)
       TXFSM_IDLE: begin
         txfsm_tx_enable = 0;
-        txfsm_is_idle = 1;
+        txfsm_o_is_busy = 0;
       end
       TXFSM_START: begin
         txfsm_tx_enable = 1;
-        txfsm_is_idle = 0;
+        txfsm_o_is_busy = 1;
       end
       TXFSM_WAIT_FOR_BUSY: begin
         txfsm_tx_enable = 1;
-        txfsm_is_idle = 0;
+        txfsm_o_is_busy = 1;
       end
       TXFSM_WAIT_FOR_NOT_BUSY: begin
         txfsm_tx_enable = 0;
-        txfsm_is_idle = 0;
+        txfsm_o_is_busy = 1;
       end
       default: begin
         txfsm_tx_enable = 0;
-        txfsm_is_idle = 0;
+        txfsm_o_is_busy = 1;
       end
     endcase
   end
