@@ -174,8 +174,11 @@ module top (
   /*======================================================*/
   /*
     txhexfsm
+
+    write a byte value from txhexfsm_data via UART.
     
-    output the value from hex_char
+    connections:
+      output the value from hex_char
     
   */
 
@@ -191,6 +194,7 @@ module top (
 
   /* txfsm wires */
   reg [2:0] txhexfsm_state;
+  wire [7:0] txhexfsm_data;
   wire txhexfsm_start;
   wire txhexfsm_is_idle;
 
@@ -203,57 +207,108 @@ module top (
 
   always @(posedge CLK) begin
     case (txhexfsm_state)
-      IDLE: begin
-        if ( rx_valid == 0 )
-          txhexfsm_state <= IDLE;
+      TXHEXFSM_IDLE: begin
+        if ( txhexfsm_start == 0 )
+          txhexfsm_state <= TXHEXFSM_IDLE;
         else
-          txhexfsm_state <= TX_HEX_HI_START1;
+          txhexfsm_state <= TXHEXFSM_HI_START1;
       end
 
-      TX_HEX_HI_START1: begin                   // delay by one cycle to set the tx_data
-          txhexfsm_state <= TX_HEX_HI_START2;
+      TXHEXFSM_HI_START1: begin                   // delay by one cycle to set the tx_data
+          txhexfsm_state <= TXHEXFSM_HI_START2;
       end
 
-      TX_HEX_HI_START2: begin                   // trigger txfsm_start
+      TXHEXFSM_HI_START2: begin                   // trigger txfsm_start
           if ( txfsm_is_idle == 0 )
-            txhexfsm_state <= TX_HEX_HI_START2;
+            txhexfsm_state <= TXHEXFSM_HI_START2;
           else
-            txhexfsm_state <= TX_HEX_HI_WAIT;
+            txhexfsm_state <= TXHEXFSM_HI_WAIT;
       end
         
-      TX_HEX_HI_WAIT: begin
+      TXHEXFSM_HI_WAIT: begin
           if ( txfsm_is_idle == 1 )
-            txhexfsm_state <= TX_HEX_HI_WAIT;
+            txhexfsm_state <= TXHEXFSM_HI_WAIT;
           else
-            txhexfsm_state <= TX_HEX_LO_START1;
+            txhexfsm_state <= TXHEXFSM_LO_START1;
       end
 
-      TX_HEX_LO_START1: begin
-          txhexfsm_state <= TX_HEX_LO_START2;
+      TXHEXFSM_LO_START1: begin
+          txhexfsm_state <= TXHEXFSM_LO_START2;
       end
 
-      TX_HEX_LO_START2: begin
+      TXHEXFSM_LO_START2: begin
           if ( txfsm_is_idle == 0 )
-            txhexfsm_state <= TX_HEX_LO_START2;
+            txhexfsm_state <= TXHEXFSM_LO_START2;
           else
-            txhexfsm_state <= TX_HEX_LO_WAIT;
+            txhexfsm_state <= TXHEXFSM_LO_WAIT;
       end
         
-      TX_HEX_LO_WAIT: begin
+      TXHEXFSM_LO_WAIT: begin
           if ( txfsm_is_idle == 1 )
-            txhexfsm_state <= TX_HEX_LO_WAIT;
+            txhexfsm_state <= TXHEXFSM_LO_WAIT;
           else
-            txhexfsm_state <= IDLE;
+            txhexfsm_state <= TXHEXFSM_IDLE;
       end
         
       default: begin
-        txhexfsm_state <= IDLE;
+        txhexfsm_state <= TXHEXFSM_IDLE;
       end
     endcase
   end
 
+/*
+  always @(*) begin
+    case (state)
+      TXHEXFSM_IDLE: begin
+        hex_4_bit_data[3:0] <= 0;
+        tx_data <=  0;
+        txfsm_start <= 0;
+      end
 
+      TXHEXFSM_HI_START1: begin
+          hex_4_bit_data[3:0] <= txhexfsm_data[7:4];
+          tx_data <=  hex_char;
+          txfsm_start <= 0;
+      end
 
+      TXHEXFSM_HI_START2: begin
+          hex_4_bit_data[3:0] <= txhexfsm_data[7:4];
+          tx_data <=  hex_char;
+          txfsm_start <= 1;
+      end
+        
+      TXHEXFSM_HI_WAIT: begin
+          hex_4_bit_data[3:0] <= txhexfsm_data[7:4];
+          tx_data <=  hex_char;
+          txfsm_start <= 0;
+      end
+        
+      TXHEXFSM_LO_START1: begin
+          hex_4_bit_data[3:0] <= txhexfsm_data[3:0];
+          tx_data <=  hex_char;
+          txfsm_start <= 0;
+      end
+      
+      TXHEXFSM_LO_START2: begin
+          hex_4_bit_data[3:0] <= txhexfsm_data[3:0];
+          tx_data <=  hex_char;
+          txfsm_start <= 1;
+      end
+        
+      TXHEXFSM_LO_WAIT: begin
+          hex_4_bit_data[3:0] <= txhexfsm_data[3:0];
+          tx_data <=  hex_char;
+          txfsm_start <= 0;
+      end
+        
+      default: begin
+          hex_4_bit_data[3:0] <= 0;
+          tx_data <=  0;
+          txfsm_start <= 0;
+      end
+    endcase
+  end
+*/
 
 
 
