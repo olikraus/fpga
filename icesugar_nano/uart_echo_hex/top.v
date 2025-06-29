@@ -387,7 +387,6 @@ module top (
 
   
 
-  assign txfsm_start = txhexfsm_o_txfsm_start | topfsm_o_txfsm_start;
  
 
 
@@ -457,6 +456,10 @@ module top (
       end
     endcase
   end
+
+  /*======================================================*/
+
+  assign txfsm_start = txhexfsm_o_txfsm_start | topfsm_o_txfsm_start;
 
   /*======================================================*/
 
