@@ -3,6 +3,11 @@
   reset.v
   
   test code for the synthesis behavior of yosys
+  On the attached PMOD-LED
+    If A is the reset state, then tun on D0
+    If B is the reset state, then tun on D7
+    
+  
   
   Result:
     it is required to specify the default state value via
@@ -27,7 +32,7 @@
 */
 
 
-module switch(  input CLK,
+module top(  input CLK,
                 output LED,
                 output PMOD1,   // D4
                 output PMOD2,   // D0
