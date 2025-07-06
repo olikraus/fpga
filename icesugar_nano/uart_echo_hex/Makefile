@@ -7,7 +7,8 @@ ${warning iCELink path: $(ICELINK_DIR)}
 
 build:
 	# input: .v, output: .json
-	yosys -l $(filename).log -p "synth_ice40 -json $(filename).json -blif $(filename).blif" $(filename).v
+	yosys -l $(filename).log -p "synth_ice40 -json $(filename).json -blif $(filename).blif; show -format dot -prefix ./$(filename);" $(filename).v
+        # dot -v -Kneato -Tpng -otop.png top.dot
 	# input: .json .pcf, output: .asc
 	nextpnr-ice40 --lp1k --package cm36 --json $(filename).json --pcf $(pcf_file) --asc $(filename).asc --freq 48
 	# input: .asc, output: .bin
@@ -32,4 +33,4 @@ uart:
 all: build upload uart
 
 clean:
-	rm -rf $(filename).blif $(filename).asc $(filename).bin $(filename).json $(filename).log
+	rm -rf $(filename).blif $(filename).asc $(filename).bin $(filename).json $(filename).log $(filename).dot
