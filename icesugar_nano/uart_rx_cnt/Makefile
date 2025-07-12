@@ -23,6 +23,9 @@ upload:
             exit 1; \
     fi
 
+uart:
+	picocom /dev/ttyACM0 --baud 9600 --imap lfcrlf
+
 
 clean:
 	rm -rf $(filename).blif $(filename).asc $(filename).bin $(filename).json $(filename).log $(filename).dot

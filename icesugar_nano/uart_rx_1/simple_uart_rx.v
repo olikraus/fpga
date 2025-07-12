@@ -1,5 +1,9 @@
 /*
 
+  NOT TESTED
+  
+  WILL PROBALY NOT WORK, USE UART_RX_CNT
+
   Implement a simple 8N1 uart
   
                 output PMOD1,   // D4
