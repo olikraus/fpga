@@ -4,8 +4,8 @@
   
   test code for the synthesis behavior of yosys
   On the attached PMOD-LED
-    If A is the reset state, then tun on D0
-    If B is the reset state, then tun on D7
+    If A is the reset state, then turn on D0
+    If B is the reset state, then turn on D7
     
   
   
@@ -20,7 +20,7 @@
         state = A;
       end
 
-  If the init state isn't prlvided, then the state machine 
+  If the init state isn't provided, then the state machine 
   is not created.
   
   
