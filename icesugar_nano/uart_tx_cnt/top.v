@@ -6,7 +6,9 @@
   
   assumes 12 MHz clock
   this is a test for the counter based rx module
-  the incoming ascii char is displayed at the connected PMOD-LED 
+  the outgoing ascii char is displayed at the connected PMOD-LED 
+  this code will output the chars from @ to Z and start over with @
+  @12MHz the output speed is about a second per char
 
 */
 
@@ -14,22 +16,19 @@
 `include "uart_tx_cnt.v"
 
 module top (
-    input CLK,  // global system clock 
+    input CLK,            // global system clock 
     output LED,         // LED
     output TX, 
     input RX,
-    
-                output PMOD1,   // D4
-                output PMOD2,   // D0
-                output PMOD3,   // D5
-                output PMOD4,   // D1
-                output PMOD5,   // D6
-                output PMOD6,   // D2
-                output PMOD7,   // D7
-                output PMOD8    // D3
-    
+    output PMOD1,   // D4
+    output PMOD2,   // D0
+    output PMOD3,   // D5
+    output PMOD4,   // D1
+    output PMOD5,   // D6
+    output PMOD6,   // D2
+    output PMOD7,   // D7
+    output PMOD8    // D3
     );
-
    
   wire D0;
   wire D1;
@@ -52,7 +51,7 @@ module top (
   wire tx_busy;
   reg tx_start;                // 'reg' is better for a well defined startup
   reg [7:0] tx_data;
-  reg [22:0] counter;
+  reg [21:0] counter;
   
   initial begin
     tx_start = 0;
@@ -61,7 +60,7 @@ module top (
   end
   
   assign TX = rx_valid;               // doesn't make sense yet, just for debug
-  assign LED = ~counter[22];
+  assign LED = ~counter[21];
 
   always @(posedge CLK)
   begin
@@ -80,18 +79,18 @@ module top (
       end
   end
 
-    uart_tx
-      #(
-        .BIT_RATE(9600),
-        .CLK_HZ (12_000_000),
-      )
-      i_uart_tx (
-        .CLK(CLK),                              // system clock
-        .TX(TX),                        // UART transmit pin
-        .START(tx_start),
-        .BUSY(tx_busy),        // high: transmit in progress
-        .DATA(tx_data),         // data, which should be sent
-      );
+  uart_tx
+    #(
+      .BIT_RATE(9600),
+      .CLK_HZ (12_000_000),
+    )
+    i_uart_tx (
+      .CLK(CLK),                              // system clock
+      .TX(TX),                        // UART transmit pin
+      .START(tx_start),
+      .BUSY(tx_busy),        // high: transmit in progress
+      .DATA(tx_data),         // data, which should be sent
+    );
 
   assign D0 = tx_data[0];
   assign D1 = tx_data[1];
@@ -103,5 +102,3 @@ module top (
   assign D7 = tx_data[7];
 
 endmodule
-    
-    

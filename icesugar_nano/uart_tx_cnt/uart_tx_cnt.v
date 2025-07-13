@@ -5,6 +5,7 @@
   * baud rate as parameter
   * BUSY will be high during transmit
   * START will be checked only if BUSY is low
+  * START has to be high for at least (or exactly) one CLK cycle 
 
 */
 
