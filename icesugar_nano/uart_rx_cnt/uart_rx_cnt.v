@@ -25,7 +25,6 @@ module uart_rx(
   // Number of clock cycles per uart bit.
   localparam       CLK_PER_BIT     = CLK_HZ / BIT_RATE;
 
-  //localparam       CLK_COUNTER_LEN      = 1+$clog2(CLK_PER_BIT);
   localparam       CLK_COUNTER_LEN      = $clog2(CLK_PER_BIT/2+1);
 
   // the clock counter will define the size of the each bit
@@ -46,7 +45,7 @@ module uart_rx(
   initial begin
     clk_counter = 0;
     bit_counter = 0;
-    cnt_enable = 1;
+    cnt_enable = 0;
     DATA = 0;
   end
 
