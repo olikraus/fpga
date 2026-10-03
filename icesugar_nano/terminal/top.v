@@ -6,9 +6,11 @@
   - Command "r\r": reads the 32-bit register and prints 8 hex chars + CR
   - Command "s <addr_hex>\r": stores register to EBR memory
   - Command "l <addr_hex>\r": loads EBR memory to register
+  - Command "e\r": EP1(e) -> RAM[4]
+  - Command "d\r": EP0(a) -> RAM[0]
+  - Command "c\r": CH(e, f, g) -> RAM[4]
   
   Memory Layout: 4 EBR blocks, 16 x 32-bit each.
-  Addr Hex: [7:4] block select (0..3), [3:0] offset (0..F)
   
   Clock: 36 MHz
   Baud: 115200
@@ -64,29 +66,6 @@ module top (
     reg [31:0] temp_val;
     reg [7:0] temp_addr;
 
-    // Embedded RAM (4 blocks of 16 x 32-bit)
-    // Forced EBR mapping using synchronous read
-    reg [31:0] ram [0:63]; 
-    reg [31:0] ram_read_data;
-    wire [5:0] ram_addr = {temp_addr[5:4], temp_addr[3:0]};
-
-    // Synchronous Memory Logic (Required for EBR mapping)
-    always @(posedge CLK) begin
-        if (rx_valid && p_state == P_SL_A2 && is_store && rx_data == 8'h0D)
-            ram[ram_addr] <= reg32;
-        ram_read_data <= ram[ram_addr];
-    end
-
-    // PMOD LEDs connected to reg32 (lower 8 bits, inverted for active-high behavior)
-    assign PMOD2 = ~reg32[0];
-    assign PMOD4 = ~reg32[1];
-    assign PMOD6 = ~reg32[2];
-    assign PMOD8 = ~reg32[3];
-    assign PMOD1 = ~reg32[4];
-    assign PMOD3 = ~reg32[5];
-    assign PMOD5 = ~reg32[6];
-    assign PMOD7 = ~reg32[7];
-
     // Parser State
     reg [3:0] p_state = 0;
     localparam P_IDLE   = 0,
@@ -94,14 +73,47 @@ module top (
                P_W_HEX  = 2,
                P_R_CR   = 3,
                P_SL_S   = 4,
-               P_SL_A1  = 5,
-               P_SL_A2  = 6,
+               P_SL_HEX = 5,
                P_L_WAIT = 7,
-               P_E_CR   = 8;
+               P_E_CR   = 8,
+               P_D_CR   = 9,
+               P_C_CR   = 10;
 
     reg trigger_resp = 0;
     reg is_store = 0;
     reg is_load = 0;
+
+    // Echo Buffer
+    reg [7:0] echo_buf;
+    reg echo_pending = 0;
+
+    // Operation FSM signals
+    reg op_trigger = 0;
+    reg op_busy = 0;
+    reg [1:0] op_type = 0; // 0: EP1, 1: EP0, 2: CH
+    reg [5:0] op_addr = 0;
+    reg [2:0] op_state = 0;
+    reg [1:0] op_cnt = 0;
+    reg [31:0] temp_op_data;
+    reg [31:0] temp_op_data2;
+    reg [31:0] temp_op_data3;
+    localparam OP_IDLE = 0, OP_READ = 1, OP_WAIT = 2, OP_WAIT2 = 7, OP_COMPUTE = 3, OP_APPLY = 4, OP_WRITE_EN = 5, OP_WRITE_DONE = 6;
+
+    // Embedded RAM (4 blocks of 16 x 32-bit)
+    reg [31:0] ram [0:63]; 
+    reg [31:0] ram_read_data;
+    reg ram_we_internal = 0;
+    wire [5:0] ram_addr = temp_addr[5:0];
+    wire [5:0] ram_addr_mux = (op_busy) ? op_addr : ram_addr;
+
+    // Synchronous Memory Logic
+    always @(posedge CLK) begin
+        if (ram_we_internal)
+            ram[ram_addr_mux] <= reg32;
+        else if (rx_valid && p_state == P_SL_HEX && is_store && rx_data == 8'h0D)
+            ram[ram_addr_mux] <= reg32;
+        ram_read_data <= ram[ram_addr_mux];
+    end
 
     // Helper for hex parsing
     wire [3:0] rx_nibble = (rx_data >= "a" && rx_data <= "f") ? (rx_data - "a" + 10) :
@@ -110,10 +122,6 @@ module top (
     wire rx_is_hex = (rx_data >= "0" && rx_data <= "9") || 
                      (rx_data >= "A" && rx_data <= "F") || 
                      (rx_data >= "a" && rx_data <= "f");
-    
-    // Echo Buffer
-    reg [7:0] echo_buf;
-    reg echo_pending = 0;
 
     // Response Buffer (8 hex chars + CR)
     reg [7:0] resp_buf [0:8];
@@ -133,11 +141,25 @@ module top (
         end
     endgenerate
 
-    // Combined Control FSM
+    // TX State Machine Signals
     reg [1:0] tx_state = 0;
     localparam ST_IDLE = 0, ST_START = 1, ST_WAIT = 2;
 
+    // PMOD LEDs connected to reg32 (lower 8 bits, inverted for active-high behavior)
+    assign PMOD2 = ~reg32[0];
+    assign PMOD4 = ~reg32[1];
+    assign PMOD6 = ~reg32[2];
+    assign PMOD8 = ~reg32[3];
+    assign PMOD1 = ~reg32[4];
+    assign PMOD3 = ~reg32[5];
+    assign PMOD5 = ~reg32[6];
+    assign PMOD7 = ~reg32[7];
+
+    // Combined Logic for reg32 and other registers
     always @(posedge CLK) begin
+        // Default assignments
+        op_trigger <= 0;
+        
         // Parser Logic
         if (rx_valid) begin
             echo_buf <= rx_data;
@@ -148,6 +170,8 @@ module top (
                     if (rx_data == "w") p_state <= P_W_S;
                     else if (rx_data == "r") p_state <= P_R_CR;
                     else if (rx_data == "e") p_state <= P_E_CR;
+                    else if (rx_data == "d") p_state <= P_D_CR;
+                    else if (rx_data == "c") p_state <= P_C_CR;
                     else if (rx_data == "s") begin p_state <= P_SL_S; is_store <= 1; is_load <= 0; end
                     else if (rx_data == "l") begin p_state <= P_SL_S; is_load <= 1; is_store <= 0; end
                 end
@@ -170,19 +194,15 @@ module top (
                     p_state <= P_IDLE;
                 end
                 P_SL_S: begin
-                    if (rx_data == " ") p_state <= P_SL_A1;
-                    else p_state <= P_IDLE;
-                end
-                P_SL_A1: begin
-                    if (rx_is_hex) begin
-                        temp_addr[7:4] <= rx_nibble;
-                        p_state <= P_SL_A2;
+                    if (rx_data == " ") begin
+                        p_state <= P_SL_HEX;
+                        temp_addr <= 0;
                     end else p_state <= P_IDLE;
                 end
-                P_SL_A2: begin
+                P_SL_HEX: begin
                     if (rx_is_hex) begin
-                        temp_addr[3:0] <= rx_nibble;
-                        p_state <= P_SL_A2;
+                        temp_addr <= {temp_addr[3:0], rx_nibble};
+                        p_state <= P_SL_HEX;
                     end else if (rx_data == 8'h0D) begin
                         if (is_load) p_state <= P_L_WAIT;
                         else p_state <= P_IDLE;
@@ -190,7 +210,25 @@ module top (
                 end
                 P_E_CR: begin
                     if (rx_data == 8'h0D) begin
-                        reg32 <= {reg32[5:0], reg32[31:6]} ^ {reg32[10:0], reg32[31:11]} ^ {reg32[24:0], reg32[31:25]};
+                        op_trigger <= 1;
+                        op_type <= 0;
+                        op_addr <= 4;
+                        p_state <= P_IDLE;
+                    end else p_state <= P_IDLE;
+                end
+                P_D_CR: begin
+                    if (rx_data == 8'h0D) begin
+                        op_trigger <= 1;
+                        op_type <= 1;
+                        op_addr <= 0;
+                        p_state <= P_IDLE;
+                    end else p_state <= P_IDLE;
+                end
+                P_C_CR: begin
+                    if (rx_data == 8'h0D) begin
+                        op_trigger <= 1;
+                        op_type <= 2;
+                        op_addr <= 4;
                         p_state <= P_IDLE;
                     end else p_state <= P_IDLE;
                 end
@@ -203,6 +241,51 @@ module top (
             reg32 <= ram_read_data;
             p_state <= P_IDLE;
         end
+
+        // Operation State Machine
+        case (op_state)
+            OP_IDLE: begin
+                ram_we_internal <= 0;
+                op_cnt <= 0;
+                if (op_trigger) begin
+                    op_busy <= 1;
+                    op_state <= OP_READ;
+                end
+            end
+            OP_READ: op_state <= OP_WAIT;
+            OP_WAIT: op_state <= OP_WAIT2;
+            OP_WAIT2: op_state <= OP_COMPUTE;
+            OP_COMPUTE: begin
+                if (op_type == 2) begin
+                    case (op_cnt)
+                        0: begin temp_op_data <= ram_read_data; op_addr <= 5; op_cnt <= 1; op_state <= OP_READ; end
+                        1: begin temp_op_data2 <= ram_read_data; op_addr <= 6; op_cnt <= 2; op_state <= OP_READ; end
+                        2: begin temp_op_data3 <= ram_read_data; op_addr <= 4; op_state <= OP_APPLY; end
+                    endcase
+                end else begin
+                    temp_op_data <= ram_read_data;
+                    op_state <= OP_APPLY;
+                end
+            end
+            OP_APPLY: begin
+                if (op_type == 0) // EP1
+                    reg32 <= {temp_op_data[5:0], temp_op_data[31:6]} ^ {temp_op_data[10:0], temp_op_data[31:11]} ^ {temp_op_data[24:0], temp_op_data[31:25]};
+                else if (op_type == 1) // EP0
+                    reg32 <= {temp_op_data[1:0], temp_op_data[31:2]} ^ {temp_op_data[12:0], temp_op_data[31:13]} ^ {temp_op_data[21:0], temp_op_data[31:22]};
+                else if (op_type == 2) // CH
+                    reg32 <= (temp_op_data & temp_op_data2) ^ (~temp_op_data & temp_op_data3);
+                op_state <= OP_WRITE_EN;
+            end
+            OP_WRITE_EN: begin
+                ram_we_internal <= 1;
+                op_state <= OP_WRITE_DONE;
+            end
+            OP_WRITE_DONE: begin
+                ram_we_internal <= 0;
+                op_state <= OP_IDLE;
+                op_busy <= 0;
+            end
+        endcase
 
         // TX State Machine
         case (tx_state)
