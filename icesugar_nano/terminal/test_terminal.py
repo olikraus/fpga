@@ -2,7 +2,7 @@ import serial
 import time
 import sys
 
-def test_terminal(port='/dev/ttyACM0', baud=9600):
+def test_terminal(port='/dev/ttyACM0', baud=28800):
     try:
         ser = serial.Serial(port, baud, timeout=1)
     except Exception as e:

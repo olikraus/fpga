@@ -5,8 +5,8 @@
   - Command "w <hex>\r": writes up to 32-bit hex to a register (zero-padded)
   - Command "r\r": reads the 32-bit register and prints 8 hex chars + CR
   
-  Clock: 12 MHz
-  Baud: 9600
+  Clock: 36 MHz
+  Baud: 28800
 */
 
 `include "uart_tx.v"
@@ -199,8 +199,8 @@ module top (
 
     // UART Modules
     uart_rx #(
-        .BIT_RATE(9600),
-        .CLK_HZ(12000000)
+        .BIT_RATE(28800),
+        .CLK_HZ(36000000)
     ) i_uart_rx (
         .CLK(CLK),
         .RX(RX),
@@ -209,8 +209,8 @@ module top (
     );
 
     uart_tx #(
-        .BIT_RATE(9600),
-        .CLK_HZ(12000000)
+        .BIT_RATE(28800),
+        .CLK_HZ(36000000)
     ) i_uart_tx (
         .CLK(CLK),
         .TX(TX),

@@ -15,7 +15,7 @@ build:
 	grep "    SB_\| Number of" $(filename).log
 
 upload:
-	../icesprog/icesprog -c 2
+	../icesprog/icesprog -c 3
 	@if [ -d '$(ICELINK_DIR)' ]; \
         then \
             cp $(filename).bin $(ICELINK_DIR); \
@@ -25,7 +25,7 @@ upload:
     fi
 
 uart:
-	picocom /dev/ttyACM0 --baud 9600 --imap lfcrlf,crcrlf
+	picocom /dev/ttyACM0 --baud 28800 --imap lfcrlf,crcrlf
 
 python-test:
 	python3 test_terminal.py
