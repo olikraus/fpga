@@ -54,15 +54,15 @@ module top (
     reg tx_start;
     wire tx_busy;
 
-    // PMOD LEDs connected to rx_data for debug
-    assign PMOD2 = rx_data[0];
-    assign PMOD4 = rx_data[1];
-    assign PMOD6 = rx_data[2];
-    assign PMOD8 = rx_data[3];
-    assign PMOD1 = rx_data[4];
-    assign PMOD3 = rx_data[5];
-    assign PMOD5 = rx_data[6];
-    assign PMOD7 = rx_data[7];
+    // PMOD LEDs connected to reg8 (inverted for active-high behavior)
+    assign PMOD2 = ~reg8[0];
+    assign PMOD4 = ~reg8[1];
+    assign PMOD6 = ~reg8[2];
+    assign PMOD8 = ~reg8[3];
+    assign PMOD1 = ~reg8[4];
+    assign PMOD3 = ~reg8[5];
+    assign PMOD5 = ~reg8[6];
+    assign PMOD7 = ~reg8[7];
 
     // Application register
     reg [7:0] reg8 = 8'h00;
