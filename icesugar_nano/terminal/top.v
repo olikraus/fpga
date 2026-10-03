@@ -130,23 +130,15 @@ module top (
                      (rx_data >= "A" && rx_data <= "F") || 
                      (rx_data >= "a" && rx_data <= "f");
 
-    // Response Buffer (8 hex chars + CR)
-    reg [7:0] resp_buf [0:8];
+    // Response Serialization State (Step 1)
+    reg [31:0] resp_val;
     reg [3:0] resp_idx = 0;
-    reg [3:0] resp_count = 0;
     reg resp_active = 0;
-
-    // Hex Conversion for Response
-    wire [7:0] hex_chars [0:7];
-    genvar i;
-    generate
-        for (i = 0; i < 8; i = i + 1) begin : gen_n2a
-            nibble_to_ascii n2a (
-                .in(reg32[4*i +: 4]),
-                .out(hex_chars[7-i]) // MSB at index 0
-            );
-        end
-    endgenerate
+    wire [7:0] resp_ascii;
+    nibble_to_ascii n2a_top (
+        .in(resp_val[31:28]),
+        .out(resp_ascii)
+    );
 
     // TX State Machine Signals
     reg [1:0] tx_state = 0;
@@ -353,22 +345,19 @@ module top (
                     echo_pending <= 0;
                     tx_state <= ST_START;
                 end else if (trigger_resp && !resp_active) begin
-                    resp_buf[0] <= hex_chars[0];
-                    resp_buf[1] <= hex_chars[1];
-                    resp_buf[2] <= hex_chars[2];
-                    resp_buf[3] <= hex_chars[3];
-                    resp_buf[4] <= hex_chars[4];
-                    resp_buf[5] <= hex_chars[5];
-                    resp_buf[6] <= hex_chars[6];
-                    resp_buf[7] <= hex_chars[7];
-                    resp_buf[8] <= 8'h0D;
-                    resp_count <= 9;
+                    resp_val <= reg32;
                     resp_idx <= 0;
                     resp_active <= 1;
                     trigger_resp <= 0;
                 end else if (resp_active) begin
-                    if (resp_idx < resp_count) begin
-                        tx_data <= resp_buf[resp_idx];
+                    if (resp_idx < 8) begin
+                        tx_data <= resp_ascii;
+                        tx_start <= 1;
+                        resp_val <= {resp_val[27:0], 4'h0};
+                        resp_idx <= resp_idx + 1;
+                        tx_state <= ST_START;
+                    end else if (resp_idx == 8) begin
+                        tx_data <= 8'h0D;
                         tx_start <= 1;
                         resp_idx <= resp_idx + 1;
                         tx_state <= ST_START;
