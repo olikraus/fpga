@@ -10,6 +10,7 @@
   - Command "d\r": reg32 += EP0(RAM[0])
   - Command "c\r": reg32 += CH(RAM[4,5,6])
   - Command "m\r": reg32 += MAJ(RAM[0,1,2])
+  - Command "t\r": reg32 += EP0(RAM[0]) + MAJ(RAM[0,1,2])
   - Command "a <addr_hex>\r": reg32 += RAM[addr]
   
   Memory Layout: 4 EBR blocks, 16 x 32-bit each.
@@ -82,7 +83,8 @@ module top (
                P_C_CR   = 10,
                P_M_CR   = 11,
                P_ADD_S  = 12,
-               P_ADD_H  = 13;
+               P_ADD_H  = 13,
+               P_T_CR   = 14;
 
     reg trigger_resp = 0;
     reg is_store = 0;
@@ -95,7 +97,7 @@ module top (
     // Operation FSM signals
     reg op_trigger = 0;
     reg op_busy = 0;
-    reg [2:0] op_type = 0; // 0: EP1, 1: EP0, 2: CH, 3: MAJ, 4: ADD
+    reg [2:0] op_type = 0; // 0: EP1, 1: EP0, 2: CH, 3: MAJ, 4: ADD, 5: T2 (EP0+MAJ)
     reg [5:0] op_addr = 0;
     reg [2:0] op_state = 0;
     reg [1:0] op_cnt = 0;
@@ -178,6 +180,7 @@ module top (
                     else if (rx_data == "d") p_state <= P_D_CR;
                     else if (rx_data == "c") p_state <= P_C_CR;
                     else if (rx_data == "m") p_state <= P_M_CR;
+                    else if (rx_data == "t") p_state <= P_T_CR;
                     else if (rx_data == "a") p_state <= P_ADD_S;
                     else if (rx_data == "s") begin p_state <= P_SL_S; is_store <= 1; is_load <= 0; end
                     else if (rx_data == "l") begin p_state <= P_SL_S; is_load <= 1; is_store <= 0; end
@@ -247,6 +250,14 @@ module top (
                         p_state <= P_IDLE;
                     end else p_state <= P_IDLE;
                 end
+                P_T_CR: begin
+                    if (rx_data == 8'h0D) begin
+                        op_trigger <= 1;
+                        op_type <= 5;
+                        op_addr <= 0;
+                        p_state <= P_IDLE;
+                    end else p_state <= P_IDLE;
+                end
                 P_ADD_S: begin
                     if (rx_data == " ") begin
                         p_state <= P_ADD_H;
@@ -287,13 +298,13 @@ module top (
             OP_WAIT: op_state <= OP_WAIT2;
             OP_WAIT2: op_state <= OP_COMPUTE;
             OP_COMPUTE: begin
-                if (op_type == 2) begin
+                if (op_type == 2) begin // CH(4, 5, 6)
                     case (op_cnt)
                         0: begin temp_op_data <= ram_read_data; op_addr <= 5; op_cnt <= 1; op_state <= OP_READ; end
                         1: begin temp_op_data2 <= ram_read_data; op_addr <= 6; op_cnt <= 2; op_state <= OP_READ; end
                         2: begin temp_op_data3 <= ram_read_data; op_addr <= 4; op_state <= OP_APPLY; end
                     endcase
-                end else if (op_type == 3) begin
+                end else if (op_type == 3 || op_type == 5) begin // MAJ(0, 1, 2) or T2(0, 1, 2)
                     case (op_cnt)
                         0: begin temp_op_data <= ram_read_data; op_addr <= 1; op_cnt <= 1; op_state <= OP_READ; end
                         1: begin temp_op_data2 <= ram_read_data; op_addr <= 2; op_cnt <= 2; op_state <= OP_READ; end
@@ -315,6 +326,10 @@ module top (
                     reg32 <= reg32 + ((temp_op_data & temp_op_data2) ^ (temp_op_data & temp_op_data3) ^ (temp_op_data2 & temp_op_data3));
                 else if (op_type == 4) // ADD
                     reg32 <= reg32 + temp_op_data;
+                else if (op_type == 5) // T2 = EP0(a) + MAJ(a,b,c)
+                    reg32 <= reg32 + 
+                             ({temp_op_data[1:0], temp_op_data[31:2]} ^ {temp_op_data[12:0], temp_op_data[31:13]} ^ {temp_op_data[21:0], temp_op_data[31:22]}) +
+                             ((temp_op_data & temp_op_data2) ^ (temp_op_data & temp_op_data3) ^ (temp_op_data2 & temp_op_data3));
                 op_state <= OP_WRITE_EN;
             end
             OP_WRITE_EN: begin

@@ -109,7 +109,7 @@ uint32_t ep1_sw(uint32_t x) {
     return ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25);
 }
 
-void fpga_add(int addr, uint32_t val) {
+void fpga_add_val(int addr, uint32_t val) {
     write_reg(val);
     char cmd[20];
     sprintf(cmd, "s %x", addr);
@@ -172,6 +172,21 @@ uint32_t fpga_maj(uint32_t a, uint32_t b, uint32_t c) {
     return res;
 }
 
+uint32_t fpga_t2(uint32_t a, uint32_t b, uint32_t c) {
+    write_reg(a); send_cmd("s 0");
+    write_reg(b); send_cmd("s 1");
+    write_reg(c); send_cmd("s 2");
+    write_reg(0);                  // Clear reg32
+    send_cmd("t");                 // reg32 += EP0(a) + MAJ(a,b,c)
+    uint32_t res = read_reg();
+    uint32_t sw = ep0_sw(a) + maj_sw(a, b, c);
+    if (res != sw) {
+        printf("\nT2 Mismatch! Input: %08x, %08x, %08x, Hardware: %08x, Software: %08x\n", a, b, c, res, sw);
+        exit(1);
+    }
+    return res;
+}
+
 #define EP0(x)       fpga_ep0(x)
 #define EP1(x)       fpga_ep1(x)
 #define CH(x, y, z)  fpga_ch(x, y, z)
@@ -216,29 +231,29 @@ void sha256_transform(uint32_t state[8], const uint8_t data[64]) {
     h = state[7];
 
     for (i = 0; i < 64; ++i) {
-        // We use the hardware accumulation property here.
+        // Prepare variables in RAM for hardware ops
+        write_reg(a); send_cmd("s 0");
+        write_reg(b); send_cmd("s 1");
+        write_reg(c); send_cmd("s 2");
+        // d is RAM[3], not used directly by hardware primitives yet
+        write_reg(e); send_cmd("s 4");
+        write_reg(f); send_cmd("s 5");
+        write_reg(g); send_cmd("s 6");
+        // h is added manually
+
         // t1 = h + EP1(e) + CH(e, f, g) + k[i] + m[i];
         write_reg(h);
-        
-        // Store k[i] in RAM index 10 (arbitrary) and add to reg32
-        fpga_add(10, k[i]);
-        send_cmd("a a"); // Add RAM[10] to reg32
-        
-        // Store m[i] in RAM index 11 (arbitrary) and add to reg32
-        fpga_add(11, m[i]);
-        send_cmd("a b"); // Add RAM[11] to reg32
-        
-        // Add EP1 and CH
-        // These already operate on e,f,g (indices 4,5,6) and ADD to reg32
+        fpga_add_val(10, k[i]);
+        send_cmd("a a");
+        fpga_add_val(11, m[i]);
+        send_cmd("a b");
         send_cmd("e");
         send_cmd("c");
-        
         t1 = read_reg();
         
         // t2 = EP0(a) + MAJ(a, b, c);
         write_reg(0);
-        send_cmd("d");
-        send_cmd("m");
+        send_cmd("t"); // New combined hardware command
         t2 = read_reg();
 
         h = g;
@@ -344,6 +359,10 @@ int main(int argc, char *argv[]) {
     printf("CH OK\n");
     MAJ(0x11223344, 0x55667788, 0x99AABBCC);
     printf("MAJ OK\n");
+    
+    // Test T2 (EP0 + MAJ)
+    fpga_t2(0x12345678, 0x9ABCDEF0, 0x0FEDCBA9);
+    printf("T2 OK\n");
 
     // Hardcoded target file name
     const char *filename = "test_4k.b64";
