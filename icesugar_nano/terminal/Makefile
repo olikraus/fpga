@@ -25,10 +25,11 @@ upload:
     fi
 
 uart:
-	picocom /dev/ttyACM0 --baud 28800 --imap lfcrlf,crcrlf
+	picocom /dev/ttyACM0 --baud 115200 --imap lfcrlf,crcrlf
 
 python-test:
 	python3 test_terminal.py
+
 
 clean:
 	rm -rf $(filename).blif $(filename).asc $(filename).bin $(filename).json $(filename).log $(filename).dot

@@ -4,9 +4,14 @@
   - Echoes all characters
   - Command "w <hex>\r": writes up to 32-bit hex to a register (zero-padded)
   - Command "r\r": reads the 32-bit register and prints 8 hex chars + CR
+  - Command "s <addr_hex>\r": stores register to EBR memory
+  - Command "l <addr_hex>\r": loads EBR memory to register
+  
+  Memory Layout: 4 EBR blocks, 16 x 32-bit each.
+  Addr Hex: [7:4] block select (0..3), [3:0] offset (0..F)
   
   Clock: 36 MHz
-  Baud: 28800
+  Baud: 115200
 */
 
 `include "uart_tx.v"
@@ -57,6 +62,20 @@ module top (
     // Application register (32-bit)
     reg [31:0] reg32 = 32'h00000000;
     reg [31:0] temp_val;
+    reg [7:0] temp_addr;
+
+    // Embedded RAM (4 blocks of 16 x 32-bit)
+    // Forced EBR mapping using synchronous read
+    reg [31:0] ram [0:63]; 
+    reg [31:0] ram_read_data;
+    wire [5:0] ram_addr = {temp_addr[5:4], temp_addr[3:0]};
+
+    // Synchronous Memory Logic (Required for EBR mapping)
+    always @(posedge CLK) begin
+        if (rx_valid && p_state == P_SL_A2 && is_store && rx_data == 8'h0D)
+            ram[ram_addr] <= reg32;
+        ram_read_data <= ram[ram_addr];
+    end
 
     // PMOD LEDs connected to reg32 (lower 8 bits, inverted for active-high behavior)
     assign PMOD2 = ~reg32[0];
@@ -69,13 +88,20 @@ module top (
     assign PMOD7 = ~reg32[7];
 
     // Parser State
-    reg [2:0] p_state = 0;
-    localparam P_IDLE = 0,
-               P_W_S  = 1,
-               P_W_HEX = 2,
-               P_R_CR = 5;
+    reg [3:0] p_state = 0;
+    localparam P_IDLE   = 0,
+               P_W_S    = 1,
+               P_W_HEX  = 2,
+               P_R_CR   = 3,
+               P_SL_S   = 4,
+               P_SL_A1  = 5,
+               P_SL_A2  = 6,
+               P_L_WAIT = 7,
+               P_E_CR   = 8;
 
     reg trigger_resp = 0;
+    reg is_store = 0;
+    reg is_load = 0;
 
     // Helper for hex parsing
     wire [3:0] rx_nibble = (rx_data >= "a" && rx_data <= "f") ? (rx_data - "a" + 10) :
@@ -121,11 +147,14 @@ module top (
                 P_IDLE: begin
                     if (rx_data == "w") p_state <= P_W_S;
                     else if (rx_data == "r") p_state <= P_R_CR;
+                    else if (rx_data == "e") p_state <= P_E_CR;
+                    else if (rx_data == "s") begin p_state <= P_SL_S; is_store <= 1; is_load <= 0; end
+                    else if (rx_data == "l") begin p_state <= P_SL_S; is_load <= 1; is_store <= 0; end
                 end
                 P_W_S: begin
                     if (rx_data == " ") begin
                         p_state <= P_W_HEX;
-                        temp_val <= 0; // Clear on start of write argument
+                        temp_val <= 0;
                     end else p_state <= P_IDLE;
                 end
                 P_W_HEX: begin
@@ -140,8 +169,39 @@ module top (
                     if (rx_data == 8'h0D) trigger_resp <= 1;
                     p_state <= P_IDLE;
                 end
+                P_SL_S: begin
+                    if (rx_data == " ") p_state <= P_SL_A1;
+                    else p_state <= P_IDLE;
+                end
+                P_SL_A1: begin
+                    if (rx_is_hex) begin
+                        temp_addr[7:4] <= rx_nibble;
+                        p_state <= P_SL_A2;
+                    end else p_state <= P_IDLE;
+                end
+                P_SL_A2: begin
+                    if (rx_is_hex) begin
+                        temp_addr[3:0] <= rx_nibble;
+                        p_state <= P_SL_A2;
+                    end else if (rx_data == 8'h0D) begin
+                        if (is_load) p_state <= P_L_WAIT;
+                        else p_state <= P_IDLE;
+                    end else p_state <= P_IDLE;
+                end
+                P_E_CR: begin
+                    if (rx_data == 8'h0D) begin
+                        reg32 <= {reg32[5:0], reg32[31:6]} ^ {reg32[10:0], reg32[31:11]} ^ {reg32[24:0], reg32[31:25]};
+                        p_state <= P_IDLE;
+                    end else p_state <= P_IDLE;
+                end
                 default: p_state <= P_IDLE;
             endcase
+        end
+
+        // Wait for synchronous memory read
+        if (p_state == P_L_WAIT) begin
+            reg32 <= ram_read_data;
+            p_state <= P_IDLE;
         end
 
         // TX State Machine
@@ -199,7 +259,7 @@ module top (
 
     // UART Modules
     uart_rx #(
-        .BIT_RATE(28800),
+        .BIT_RATE(115200),
         .CLK_HZ(36000000)
     ) i_uart_rx (
         .CLK(CLK),
@@ -209,7 +269,7 @@ module top (
     );
 
     uart_tx #(
-        .BIT_RATE(28800),
+        .BIT_RATE(115200),
         .CLK_HZ(36000000)
     ) i_uart_tx (
         .CLK(CLK),
