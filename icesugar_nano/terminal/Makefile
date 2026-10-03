@@ -9,7 +9,7 @@ build:
 	# input: .v, output: .json
 	yosys -l $(filename).log -p "synth_ice40 -json $(filename).json -blif $(filename).blif; show -format dot -prefix ./$(filename);" $(filename).v
 	# input: .json .pcf, output: .asc
-	nextpnr-ice40 --lp1k --package cm36 --json $(filename).json --pcf $(pcf_file) --asc $(filename).asc --freq 48
+	nextpnr-ice40 --lp1k --package cm36 --json $(filename).json --pcf $(pcf_file) --asc $(filename).asc --freq 36
 	# input: .asc, output: .bin
 	icepack $(filename).asc $(filename).bin
 	grep "    SB_\| Number of" $(filename).log
