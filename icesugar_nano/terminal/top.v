@@ -2,8 +2,8 @@
   top.v
   Command-based terminal for IceSugar Nano
   - Echoes all characters
-  - Command "w AB\r": writes 0xAB to an 8-bit register
-  - Command "r\r": reads the register and prints its value as two hex chars + CR
+  - Command "w <hex>\r": writes up to 32-bit hex to a register (zero-padded)
+  - Command "r\r": reads the 32-bit register and prints 8 hex chars + CR
   
   Clock: 12 MHz
   Baud: 9600
@@ -54,44 +54,58 @@ module top (
     reg tx_start;
     wire tx_busy;
 
-    // PMOD LEDs connected to reg8 (inverted for active-high behavior)
-    assign PMOD2 = ~reg8[0];
-    assign PMOD4 = ~reg8[1];
-    assign PMOD6 = ~reg8[2];
-    assign PMOD8 = ~reg8[3];
-    assign PMOD1 = ~reg8[4];
-    assign PMOD3 = ~reg8[5];
-    assign PMOD5 = ~reg8[6];
-    assign PMOD7 = ~reg8[7];
+    // Application register (32-bit)
+    reg [31:0] reg32 = 32'h00000000;
+    reg [31:0] temp_val;
 
-    // Application register
-    reg [7:0] reg8 = 8'h00;
-    reg [7:0] temp_val;
+    // PMOD LEDs connected to reg32 (lower 8 bits, inverted for active-high behavior)
+    assign PMOD2 = ~reg32[0];
+    assign PMOD4 = ~reg32[1];
+    assign PMOD6 = ~reg32[2];
+    assign PMOD8 = ~reg32[3];
+    assign PMOD1 = ~reg32[4];
+    assign PMOD3 = ~reg32[5];
+    assign PMOD5 = ~reg32[6];
+    assign PMOD7 = ~reg32[7];
 
     // Parser State
     reg [2:0] p_state = 0;
     localparam P_IDLE = 0,
                P_W_S  = 1,
-               P_W_H1 = 2,
-               P_W_H2 = 3,
-               P_W_CR = 4,
+               P_W_HEX = 2,
                P_R_CR = 5;
 
     reg trigger_resp = 0;
+
+    // Helper for hex parsing
+    wire [3:0] rx_nibble = (rx_data >= "a" && rx_data <= "f") ? (rx_data - "a" + 10) :
+                           (rx_data >= "A" && rx_data <= "F") ? (rx_data - "A" + 10) :
+                           (rx_data - "0");
+    wire rx_is_hex = (rx_data >= "0" && rx_data <= "9") || 
+                     (rx_data >= "A" && rx_data <= "F") || 
+                     (rx_data >= "a" && rx_data <= "f");
     
     // Echo Buffer
     reg [7:0] echo_buf;
     reg echo_pending = 0;
 
-    // Response Buffer
-    reg [7:0] resp_buf [0:2];
-    reg [1:0] resp_idx = 0;
-    reg [1:0] resp_count = 0;
+    // Response Buffer (8 hex chars + CR)
+    reg [7:0] resp_buf [0:8];
+    reg [3:0] resp_idx = 0;
+    reg [3:0] resp_count = 0;
     reg resp_active = 0;
 
-    wire [7:0] hex_char_h1, hex_char_h2;
-    nibble_to_ascii n2a_h1 (.in(reg8[7:4]), .out(hex_char_h1));
-    nibble_to_ascii n2a_h2 (.in(reg8[3:0]), .out(hex_char_h2));
+    // Hex Conversion for Response
+    wire [7:0] hex_chars [0:7];
+    genvar i;
+    generate
+        for (i = 0; i < 8; i = i + 1) begin : gen_n2a
+            nibble_to_ascii n2a (
+                .in(reg32[4*i +: 4]),
+                .out(hex_chars[7-i]) // MSB at index 0
+            );
+        end
+    endgenerate
 
     // Combined Control FSM
     reg [1:0] tx_state = 0;
@@ -109,24 +123,18 @@ module top (
                     else if (rx_data == "r") p_state <= P_R_CR;
                 end
                 P_W_S: begin
-                    if (rx_data == " ") p_state <= P_W_H1;
-                    else p_state <= P_IDLE;
-                end
-                P_W_H1: begin
-                    if ((rx_data >= "0" && rx_data <= "9") || (rx_data >= "A" && rx_data <= "F") || (rx_data >= "a" && rx_data <= "f")) begin
-                        temp_val[7:4] <= (rx_data >= "a") ? (rx_data - "a" + 10) : (rx_data >= "A" ? rx_data - "A" + 10 : rx_data - "0");
-                        p_state <= P_W_H2;
+                    if (rx_data == " ") begin
+                        p_state <= P_W_HEX;
+                        temp_val <= 0; // Clear on start of write argument
                     end else p_state <= P_IDLE;
                 end
-                P_W_H2: begin
-                    if ((rx_data >= "0" && rx_data <= "9") || (rx_data >= "A" && rx_data <= "F") || (rx_data >= "a" && rx_data <= "f")) begin
-                        temp_val[3:0] <= (rx_data >= "a") ? (rx_data - "a" + 10) : (rx_data >= "A" ? rx_data - "A" + 10 : rx_data - "0");
-                        p_state <= P_W_CR;
+                P_W_HEX: begin
+                    if (rx_is_hex) begin
+                        temp_val <= {temp_val[27:0], rx_nibble};
+                    end else if (rx_data == 8'h0D) begin
+                        reg32 <= temp_val;
+                        p_state <= P_IDLE;
                     end else p_state <= P_IDLE;
-                end
-                P_W_CR: begin
-                    if (rx_data == 8'h0D) reg8 <= temp_val;
-                    p_state <= P_IDLE;
                 end
                 P_R_CR: begin
                     if (rx_data == 8'h0D) trigger_resp <= 1;
@@ -146,10 +154,16 @@ module top (
                     echo_pending <= 0;
                     tx_state <= ST_START;
                 end else if (trigger_resp && !resp_active) begin
-                    resp_buf[0] <= hex_char_h1;
-                    resp_buf[1] <= hex_char_h2;
-                    resp_buf[2] <= 8'h0D;
-                    resp_count <= 3;
+                    resp_buf[0] <= hex_chars[0];
+                    resp_buf[1] <= hex_chars[1];
+                    resp_buf[2] <= hex_chars[2];
+                    resp_buf[3] <= hex_chars[3];
+                    resp_buf[4] <= hex_chars[4];
+                    resp_buf[5] <= hex_chars[5];
+                    resp_buf[6] <= hex_chars[6];
+                    resp_buf[7] <= hex_chars[7];
+                    resp_buf[8] <= 8'h0D;
+                    resp_count <= 9;
                     resp_idx <= 0;
                     resp_active <= 1;
                     trigger_resp <= 0;
@@ -181,7 +195,7 @@ module top (
     end
 
     // LED reflects bit 0 of the register
-    assign LED = reg8[0];
+    assign LED = reg32[0];
 
     // UART Modules
     uart_rx #(
