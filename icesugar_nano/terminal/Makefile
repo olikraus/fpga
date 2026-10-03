@@ -32,4 +32,10 @@ python-test:
 
 
 clean:
-	rm -rf $(filename).blif $(filename).asc $(filename).bin $(filename).json $(filename).log $(filename).dot
+	rm -rf $(filename).blif $(filename).asc $(filename).bin $(filename).json $(filename).log $(filename).dot sum fpga_sum
+
+sum: sum.c
+	gcc -Wall -O2 -o sum sum.c
+
+fpga_sum: fpga_sum.c
+	gcc -Wall -O2 -o fpga_sum fpga_sum.c
