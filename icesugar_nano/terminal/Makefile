@@ -15,6 +15,7 @@ build:
 	grep "    SB_\| Number of" $(filename).log
 
 upload:
+	../icesprog/icesprog -c 2
 	@if [ -d '$(ICELINK_DIR)' ]; \
         then \
             cp $(filename).bin $(ICELINK_DIR); \
