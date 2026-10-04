@@ -113,6 +113,8 @@ def test_terminal(port='/dev/ttyACM0', baud=115200):
         expected = ep1_sw(val)
         print(f"Testing EP1(0x{val:08X})...")
         send_cmd(f"w {val:08X}")
+        send_cmd("s 4")
+        send_cmd("w 00000000")
         send_cmd("e")
         actual_hex = read_reg()
         actual = int(actual_hex, 16)
