@@ -29,19 +29,13 @@ $(filename).fs: $(filename)_pnr.json
 
 # Flash to Board
 upload: $(filename).fs
-#	usbreset 0403:6010
 	$(ENV) openFPGALoader -b tangnano9k $(filename).fs
 
-upload2: $(filename).fs
-	echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/unbind
-	sleep 1
-	echo '1-3' | sudo tee /sys/bus/usb/drivers/usb/bind
-	sleep 1
-	$(ENV) openFPGALoader -b tangnano9k $(filename).fs
 
 # UART communication
 uart:
-	picocom /dev/ttyUSB1 --baud 9600 --imap lfcrlf
+	stty -F /dev/ttyUSB1 9600 raw -echo 2>/dev/null || stty -F /dev/ttyUSB0 9600 raw -echo 2>/dev/null || true
+	picocom /dev/ttyUSB1 --baud 9600 --imap crcrlf
 
 # Cleanup generated files
 

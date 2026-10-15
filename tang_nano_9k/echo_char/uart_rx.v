@@ -1,7 +1,7 @@
 /*
-  Repository-standard 8N1 UART receiver (from echo_hex)
-  * with input synchronizer flip-flops (rx_sync1, rx_sync2)
-  * corrected output reg VALID
+  Simplified 8N1 UART Receiver (Repository-standard style without extra sync flops)
+  * Baud rate as parameter
+  * Valid output line indicates valid DATA for 1 clock cycle
 */
 
 module uart_rx(  
@@ -17,20 +17,11 @@ module uart_rx(
   localparam       CLK_PER_BIT     = CLK_HZ / BIT_RATE;
   localparam       CLK_COUNTER_LEN = $clog2(CLK_PER_BIT/2+1);
 
-  // Input synchronizer to prevent metastability
-  reg rx_sync1, rx_sync2;
-  always @(posedge CLK) begin
-    rx_sync1 <= RX;
-    rx_sync2 <= rx_sync1;
-  end
-
   reg [CLK_COUNTER_LEN-1:0] clk_counter;
   reg [4:0] bit_counter;
   reg cnt_enable;
 
   initial begin
-    rx_sync1 = 1;
-    rx_sync2 = 1;
     clk_counter = 0;
     bit_counter = 0;
     cnt_enable = 0;
@@ -41,7 +32,7 @@ module uart_rx(
   always @(posedge CLK) begin
     if ( cnt_enable == 0 ) 
       begin
-        if ( rx_sync2 == 1 ) 
+        if ( RX == 1 ) 
           begin            // line idle state
             clk_counter <= 0;
             bit_counter <= 0;
@@ -59,26 +50,26 @@ module uart_rx(
       else 
         begin
           case (bit_counter)
-            0: if ( rx_sync2 == 1 )                     // start detected... 
+            0: if ( RX == 1 )                     // start detected... 
                 cnt_enable <= 0;                     // , but start bit went back to idle, so stop everything 
             1: begin end
-            2: DATA[0] <= rx_sync2;
+            2: DATA[0] <= RX;
             3: begin end
-            4: DATA[1] <= rx_sync2;
+            4: DATA[1] <= RX;
             5: begin end
-            6: DATA[2] <= rx_sync2;
+            6: DATA[2] <= RX;
             7: begin end
-            8: DATA[3] <= rx_sync2;
+            8: DATA[3] <= RX;
             9: begin end
-            10: DATA[4] <= rx_sync2;
+            10: DATA[4] <= RX;
             11: begin end
-            12: DATA[5] <= rx_sync2;
+            12: DATA[5] <= RX;
             13: begin end
-            14: DATA[6] <= rx_sync2;
+            14: DATA[6] <= RX;
             15: begin end
-            16: DATA[7] <= rx_sync2;
+            16: DATA[7] <= RX;
             17: begin end
-            18: if ( rx_sync2 == 0 )         // sample stop bit sample
+            18: if ( RX == 0 )         // sample stop bit sample
                 cnt_enable <= 0;        // stop bit invalid, so stop all the counting and do a reset
             19: begin end
             default: cnt_enable <= 0;   // reset counter 
