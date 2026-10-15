@@ -27,7 +27,8 @@ upload: $(filename).fs
 #	$(ENV) openFPGALoader -b tangnano9k top.fs
 
 uart:
-	picocom /dev/ttyUSB1 --baud 9600 --imap lfcrlf
+	stty -F /dev/ttyUSB1 9600 raw -echo 2>/dev/null || stty -F /dev/ttyUSB0 9600 raw -echo 2>/dev/null || true
+	picocom /dev/ttyUSB1 --baud 9600 --imap crcrlf
 
 clean:
 	rm -f $(filename).json $(filename)_pnr.json $(filename).fs
