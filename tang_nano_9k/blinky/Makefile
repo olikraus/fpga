@@ -1,4 +1,5 @@
 # Define the environment source prefix (pointing up one level to toolchain)
+SHELL := /bin/bash
 ENV = . ../toolchain/oss-cad-suite/environment &&
 
 .PHONY: all flash clean
@@ -24,7 +25,7 @@ blinky.fs: blinky_pnr.json
 
 # 4. Flash to Board
 upload: blinky.fs
-	$(ENV) openFPGALoader -b tangnano9k blinky.fs
+	$(ENV) openFPGALoader -b tangnano9k -f blinky.fs
 
 # Cleanup generated files
 clean:
