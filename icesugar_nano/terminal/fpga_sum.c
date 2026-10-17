@@ -230,31 +230,49 @@ void sha256_transform(uint32_t state[8], const uint8_t data[64]) {
     g = state[6];
     h = state[7];
 
+    uint32_t sw_a = a, sw_b = b, sw_c = c, sw_d = d;
+    uint32_t sw_e = e, sw_f = f, sw_g = g, sw_h = h;
+
     for (i = 0; i < 64; ++i) {
+        uint32_t sw_t1 = sw_h + ep1_sw(sw_e) + ch_sw(sw_e, sw_f, sw_g) + k[i] + m[i];
+        uint32_t sw_t2 = ep0_sw(sw_a) + maj_sw(sw_a, sw_b, sw_c);
+
         // Prepare variables in RAM for hardware ops
         write_reg(a); send_cmd("s 0");
         write_reg(b); send_cmd("s 1");
         write_reg(c); send_cmd("s 2");
-        // d is RAM[3], not used directly by hardware primitives yet
         write_reg(e); send_cmd("s 4");
         write_reg(f); send_cmd("s 5");
         write_reg(g); send_cmd("s 6");
-        // h is added manually
 
-        // t1 = h + EP1(e) + CH(e, f, g) + k[i] + m[i];
+        write_reg(k[i]); send_cmd("s a");
+        write_reg(m[i]); send_cmd("s b");
+
+        // t1 = h + k[i] + m[i] + EP1(e) + CH(e, f, g)
         write_reg(h);
-        fpga_add_val(10, k[i]);
-        send_cmd("a a");
-        fpga_add_val(11, m[i]);
-        send_cmd("a b");
-        send_cmd("e");
-        send_cmd("c");
+        send_cmd("a a"); // + k[i]
+        send_cmd("a b"); // + m[i]
+
+        uint32_t cur = read_reg();
+        write_reg(cur + fpga_ep1(e));
+
+        cur = read_reg();
+        write_reg(cur + fpga_ch(e, f, g));
+
         t1 = read_reg();
         
-        // t2 = EP0(a) + MAJ(a, b, c);
-        write_reg(0);
-        send_cmd("t"); // New combined hardware command
-        t2 = read_reg();
+        if (t1 != sw_t1) {
+            printf("\nSHA256 round %d t1 Mismatch! Hardware: %08x, Software: %08x\n", i, t1, sw_t1);
+            exit(1);
+        }
+
+        // t2 = EP0(a) + MAJ(a, b, c) via fpga_t2
+        t2 = fpga_t2(a, b, c);
+
+        if (t2 != sw_t2) {
+            printf("\nSHA256 round %d t2 Mismatch! Hardware: %08x, Software: %08x\n", i, t2, sw_t2);
+            exit(1);
+        }
 
         h = g;
         g = f;
@@ -264,6 +282,15 @@ void sha256_transform(uint32_t state[8], const uint8_t data[64]) {
         c = b;
         b = a;
         a = t1 + t2;
+
+        sw_h = sw_g;
+        sw_g = sw_f;
+        sw_f = sw_e;
+        sw_e = sw_d + sw_t1;
+        sw_d = sw_c;
+        sw_c = sw_b;
+        sw_b = sw_a;
+        sw_a = sw_t1 + sw_t2;
     }
 
     state[0] += a;
@@ -354,8 +381,10 @@ int main(int argc, char *argv[]) {
 
     // Standard primitive checks
     EP1(0x87654321);
+    EP1(0x510e527f);
     printf("EP1 OK\n");
     CH(0x12345678, 0x9ABCDEF0, 0x0FEDCBA9);
+    CH(0x510e527f, 0x9b05688c, 0x1f83d9ab);
     printf("CH OK\n");
     MAJ(0x11223344, 0x55667788, 0x99AABBCC);
     printf("MAJ OK\n");
@@ -365,7 +394,7 @@ int main(int argc, char *argv[]) {
     printf("T2 OK\n");
 
     // Hardcoded target file name
-    const char *filename = "test_4k.b64";
+    const char *filename = "test_128b.b64";
 
     FILE *f = fopen(filename, "rb");
     if (!f) {

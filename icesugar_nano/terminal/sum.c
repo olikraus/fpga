@@ -120,7 +120,7 @@ void sha256_final(SHA256_CTX *ctx, uint8_t hash[32]) {
 
 int main(void) {
     // Hardcoded target file name
-    const char *filename = "test_4k.b64";
+    const char *filename = "test_128b.b64";
 
     FILE *f = fopen(filename, "rb");
     if (!f) {
